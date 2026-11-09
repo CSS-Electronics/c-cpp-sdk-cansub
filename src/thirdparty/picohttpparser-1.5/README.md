@@ -114,3 +114,8 @@ Benchmark
 The benchmark code is from [fukamachi/fast-http@6b91103](https://github.com/fukamachi/fast-http/tree/6b9110347c7a3407310c08979aefd65078518478).
 
 The internals of picohttpparser has been described to some extent in [my blog entry]( http://blog.kazuhooku.com/2014/11/the-internals-h2o-or-how-to-write-fast.html).
+
+CANsub library changes
+----------------------
+
+All but the `Makefile`, this readme, `picohttpparser.c` and `picohttpparser.h` files have been removed.
