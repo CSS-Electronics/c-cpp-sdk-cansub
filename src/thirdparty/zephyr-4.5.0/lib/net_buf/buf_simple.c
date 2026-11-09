@@ -4,10 +4,14 @@
  * Copyright (c) 2015-2019 Intel Corporation
  *
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Adapted for CANsub library:
+ * - Disabled all logging.
+ * - Removed all Zephyr specific includes, replaced with common types and utilities.
+ * - Adapted asserts.
+ * - Moved buffer hardening to an in-file define flag.
+ * - All functions using UNALIGNED_GET has been refactored.
  */
-
-#include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(net_buf_simple, CONFIG_NET_BUF_LOG_LEVEL);
 
 #include <stdio.h>
 #include <stddef.h>
@@ -16,18 +20,14 @@ LOG_MODULE_REGISTER(net_buf_simple, CONFIG_NET_BUF_LOG_LEVEL);
 
 #include <zephyr/net_buf.h>
 
-#if defined(CONFIG_NET_BUF_SIMPLE_LOG)
-#define NET_BUF_SIMPLE_DBG(fmt, ...) LOG_DBG("(%p) " fmt, k_current_get(), \
-				      ##__VA_ARGS__)
-#define NET_BUF_SIMPLE_ERR(fmt, ...) LOG_ERR(fmt, ##__VA_ARGS__)
-#define NET_BUF_SIMPLE_WARN(fmt, ...) LOG_WRN(fmt, ##__VA_ARGS__)
-#define NET_BUF_SIMPLE_INFO(fmt, ...) LOG_INF(fmt, ##__VA_ARGS__)
-#else
 #define NET_BUF_SIMPLE_DBG(fmt, ...)
 #define NET_BUF_SIMPLE_ERR(fmt, ...)
 #define NET_BUF_SIMPLE_WARN(fmt, ...)
 #define NET_BUF_SIMPLE_INFO(fmt, ...)
-#endif /* CONFIG_NET_BUF_SIMPLE_LOG */
+
+#ifndef CONFIG_NET_BUF_HARDENING
+#define CONFIG_NET_BUF_HARDENING
+#endif
 
 #if defined(CONFIG_NET_BUF_HARDENING)
 /* Fail-closed check for the mutating primitives. If the buffer's metadata is
@@ -40,7 +40,7 @@ LOG_MODULE_REGISTER(net_buf_simple, CONFIG_NET_BUF_LOG_LEVEL);
  */
 static bool net_buf_simple_ok_check(const struct net_buf_simple *buf, bool ok, const char *func)
 {
-	ARG_UNUSED(func);
+	(void)(func);
 
 	if (!ok || !net_buf_simple_is_valid(buf)) {
 		NET_BUF_SIMPLE_ERR("%s: net_buf %p integrity check failed", func, (void *)buf);
@@ -59,24 +59,24 @@ static bool net_buf_simple_ok_check(const struct net_buf_simple *buf, bool ok, c
  * skipping the store (rather than dereferencing NULL) when hardening rejected
  * the request. Contains no flow-control statements.
  */
-#define NET_BUF_SIMPLE_PUT(_put_fn, _val, _ptr)  \
-	do {                                     \
-		void *_dst = (_ptr);             \
-						 \
-		if (_dst != NULL) {              \
-			_put_fn((_val), _dst);   \
-		}                                \
+#define NET_BUF_SIMPLE_PUT(_put_fn, _val, _ptr)	\
+	do {										\
+		void *_dst = (_ptr);					\
+												\
+		if (_dst != NULL) {						\
+			_put_fn((_val), _dst);				\
+		}										\
 	} while (0)
 #else
 /* A macro (rather than a helper function) so that the assert reports the
  * file:line of the net_buf operation that failed, as it did before the
  * hardening checks were added.
  */
-#define net_buf_simple_ok(_buf, _ok)             \
-	({                                       \
-		ARG_UNUSED(_buf);                \
-		__ASSERT_NO_MSG(_ok);            \
-		true;                            \
+#define net_buf_simple_ok(_buf, _ok)			\
+	({											\
+		(void)(_buf);							\
+		assert(_ok);							\
+		true;									\
 	})
 
 #define NET_BUF_SIMPLE_PUT(_put_fn, _val, _ptr) _put_fn((_val), (_ptr))
@@ -93,8 +93,8 @@ void net_buf_simple_init_with_data(struct net_buf_simple *buf,
 
 void net_buf_simple_reserve(struct net_buf_simple *buf, size_t reserve)
 {
-	__ASSERT_NO_MSG(buf);
-	__ASSERT_NO_MSG(buf->len == 0U);
+	assert(buf);
+	assert(buf->len == 0U);
 	NET_BUF_SIMPLE_DBG("buf %p reserve %zu", buf, reserve);
 
 	buf->data = buf->__buf + reserve;
@@ -122,16 +122,18 @@ void *net_buf_simple_add(struct net_buf_simple *buf, size_t len)
 }
 
 void *net_buf_simple_add_mem(struct net_buf_simple *buf, const void *mem,
-			     size_t len)
+				 size_t len)
 {
 	void *tail;
 
 	NET_BUF_SIMPLE_DBG("buf %p len %zu", buf, len);
 
 	tail = net_buf_simple_add(buf, len);
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && tail == NULL) {
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (tail == NULL) {
 		return NULL;
 	}
+#endif
 
 	return memcpy(tail, mem, len);
 }
@@ -143,9 +145,11 @@ uint8_t *net_buf_simple_add_u8(struct net_buf_simple *buf, uint8_t val)
 	NET_BUF_SIMPLE_DBG("buf %p val 0x%02x", buf, val);
 
 	u8 = net_buf_simple_add(buf, 1);
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && u8 == NULL) {
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (u8 == NULL) {
 		return NULL;
 	}
+#endif
 	*u8 = val;
 
 	return u8;
@@ -253,9 +257,11 @@ uint8_t net_buf_simple_remove_u8(struct net_buf_simple *buf)
 	void *ptr;
 
 	ptr = net_buf_simple_remove_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
+#endif
 	val = *(uint8_t *)ptr;
 
 	return val;
@@ -263,182 +269,134 @@ uint8_t net_buf_simple_remove_u8(struct net_buf_simple *buf)
 
 uint16_t net_buf_simple_remove_le16(struct net_buf_simple *buf)
 {
-	uint16_t val;
-	void *ptr;
-
-	ptr = net_buf_simple_remove_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_remove_mem(buf, sizeof(uint16_t));
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((uint16_t *)ptr);
-
-	return sys_le16_to_cpu(val);
+#endif
+	return sys_get_le16(ptr);
 }
 
 uint16_t net_buf_simple_remove_be16(struct net_buf_simple *buf)
 {
-	uint16_t val;
-	void *ptr;
-
-	ptr = net_buf_simple_remove_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_remove_mem(buf, sizeof(uint16_t));
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((uint16_t *)ptr);
-
-	return sys_be16_to_cpu(val);
+#endif
+	return sys_get_be16(ptr);
 }
 
 uint32_t net_buf_simple_remove_le24(struct net_buf_simple *buf)
 {
-	struct uint24 {
-		uint32_t u24 : 24;
-	} __packed val;
-	void *ptr;
-
-	ptr = net_buf_simple_remove_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_remove_mem(buf, 3);
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((struct uint24 *)ptr);
-
-	return sys_le24_to_cpu(val.u24);
+#endif
+	return sys_get_le24(ptr);
 }
 
 uint32_t net_buf_simple_remove_be24(struct net_buf_simple *buf)
 {
-	struct uint24 {
-		uint32_t u24 : 24;
-	} __packed val;
-	void *ptr;
-
-	ptr = net_buf_simple_remove_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_remove_mem(buf, 3);
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((struct uint24 *)ptr);
-
-	return sys_be24_to_cpu(val.u24);
+#endif
+	return sys_get_be24(ptr);
 }
 
 uint32_t net_buf_simple_remove_le32(struct net_buf_simple *buf)
 {
-	uint32_t val;
-	void *ptr;
-
-	ptr = net_buf_simple_remove_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_remove_mem(buf, sizeof(uint32_t));
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((uint32_t *)ptr);
-
-	return sys_le32_to_cpu(val);
+#endif
+	return sys_get_le32(ptr);
 }
 
 uint32_t net_buf_simple_remove_be32(struct net_buf_simple *buf)
 {
-	uint32_t val;
-	void *ptr;
-
-	ptr = net_buf_simple_remove_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_remove_mem(buf, sizeof(uint32_t));
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((uint32_t *)ptr);
-
-	return sys_be32_to_cpu(val);
+#endif
+	return sys_get_be32(ptr);
 }
 
 uint64_t net_buf_simple_remove_le40(struct net_buf_simple *buf)
 {
-	struct uint40 {
-		uint64_t u40: 40;
-	} __packed val;
-	void *ptr;
-
-	ptr = net_buf_simple_remove_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_remove_mem(buf, 5);
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((struct uint40 *)ptr);
-
-	return sys_le40_to_cpu(val.u40);
+#endif
+	return sys_get_le40(ptr);
 }
 
 uint64_t net_buf_simple_remove_be40(struct net_buf_simple *buf)
 {
-	struct uint40 {
-		uint64_t u40: 40;
-	} __packed val;
-	void *ptr;
-
-	ptr = net_buf_simple_remove_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_remove_mem(buf, 5);
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((struct uint40 *)ptr);
-
-	return sys_be40_to_cpu(val.u40);
+#endif
+	return sys_get_be40(ptr);
 }
 
 uint64_t net_buf_simple_remove_le48(struct net_buf_simple *buf)
 {
-	struct uint48 {
-		uint64_t u48 : 48;
-	} __packed val;
-	void *ptr;
-
-	ptr = net_buf_simple_remove_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_remove_mem(buf, 6);
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((struct uint48 *)ptr);
-
-	return sys_le48_to_cpu(val.u48);
+#endif
+	return sys_get_le48(ptr);
 }
 
 uint64_t net_buf_simple_remove_be48(struct net_buf_simple *buf)
 {
-	struct uint48 {
-		uint64_t u48 : 48;
-	} __packed val;
-	void *ptr;
-
-	ptr = net_buf_simple_remove_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_remove_mem(buf, 6);
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((struct uint48 *)ptr);
-
-	return sys_be48_to_cpu(val.u48);
+#endif
+	return sys_get_be48(ptr);
 }
 
 uint64_t net_buf_simple_remove_le64(struct net_buf_simple *buf)
 {
-	uint64_t val;
-	void *ptr;
-
-	ptr = net_buf_simple_remove_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_remove_mem(buf, sizeof(uint64_t));
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((uint64_t *)ptr);
-
-	return sys_le64_to_cpu(val);
+#endif
+	return sys_get_le64(ptr);
 }
 
 uint64_t net_buf_simple_remove_be64(struct net_buf_simple *buf)
 {
-	uint64_t val;
-	void *ptr;
-
-	ptr = net_buf_simple_remove_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_remove_mem(buf, sizeof(uint64_t));
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((uint64_t *)ptr);
-
-	return sys_be64_to_cpu(val);
+#endif
+	return sys_get_be64(ptr);
 }
 
 void *net_buf_simple_push(struct net_buf_simple *buf, size_t len)
@@ -455,16 +413,18 @@ void *net_buf_simple_push(struct net_buf_simple *buf, size_t len)
 }
 
 void *net_buf_simple_push_mem(struct net_buf_simple *buf, const void *mem,
-			      size_t len)
+				  size_t len)
 {
 	void *data;
 
 	NET_BUF_SIMPLE_DBG("buf %p len %zu", buf, len);
 
 	data = net_buf_simple_push(buf, len);
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && data == NULL) {
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (data == NULL) {
 		return NULL;
 	}
+#endif
 
 	return memcpy(data, mem, len);
 }
@@ -487,10 +447,11 @@ void net_buf_simple_push_u8(struct net_buf_simple *buf, uint8_t val)
 {
 	uint8_t *data = net_buf_simple_push(buf, 1);
 
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && data == NULL) {
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (data == NULL) {
 		return;
 	}
-
+#endif
 	*data = val;
 }
 
@@ -598,9 +559,11 @@ uint8_t net_buf_simple_pull_u8(struct net_buf_simple *buf)
 	void *ptr;
 
 	ptr = net_buf_simple_pull_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
+#endif
 	val = *(uint8_t *)ptr;
 
 	return val;
@@ -608,180 +571,132 @@ uint8_t net_buf_simple_pull_u8(struct net_buf_simple *buf)
 
 uint16_t net_buf_simple_pull_le16(struct net_buf_simple *buf)
 {
-	uint16_t val;
-	void *ptr;
-
-	ptr = net_buf_simple_pull_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_pull_mem(buf, sizeof(uint16_t));
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((uint16_t *)ptr);
-
-	return sys_le16_to_cpu(val);
+#endif
+	return sys_get_le16(ptr);
 }
 
 uint16_t net_buf_simple_pull_be16(struct net_buf_simple *buf)
 {
-	uint16_t val;
-	void *ptr;
-
-	ptr = net_buf_simple_pull_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_pull_mem(buf, sizeof(uint16_t));
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((uint16_t *)ptr);
-
-	return sys_be16_to_cpu(val);
+#endif
+	return sys_get_be16(ptr);
 }
 
 uint32_t net_buf_simple_pull_le24(struct net_buf_simple *buf)
 {
-	struct uint24 {
-		uint32_t u24:24;
-	} __packed val;
-	void *ptr;
-
-	ptr = net_buf_simple_pull_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_pull_mem(buf, 3);
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((struct uint24 *)ptr);
-
-	return sys_le24_to_cpu(val.u24);
+#endif
+	return sys_get_le24(ptr);
 }
 
 uint32_t net_buf_simple_pull_be24(struct net_buf_simple *buf)
 {
-	struct uint24 {
-		uint32_t u24:24;
-	} __packed val;
-	void *ptr;
-
-	ptr = net_buf_simple_pull_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_pull_mem(buf, 3);
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((struct uint24 *)ptr);
-
-	return sys_be24_to_cpu(val.u24);
+#endif
+	return sys_get_be24(ptr);
 }
 
 uint32_t net_buf_simple_pull_le32(struct net_buf_simple *buf)
 {
-	uint32_t val;
-	void *ptr;
-
-	ptr = net_buf_simple_pull_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_pull_mem(buf, sizeof(uint32_t));
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((uint32_t *)ptr);
-
-	return sys_le32_to_cpu(val);
+#endif
+	return sys_get_le32(ptr);
 }
 
 uint32_t net_buf_simple_pull_be32(struct net_buf_simple *buf)
 {
-	uint32_t val;
-	void *ptr;
-
-	ptr = net_buf_simple_pull_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_pull_mem(buf, sizeof(uint32_t));
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((uint32_t *)ptr);
-
-	return sys_be32_to_cpu(val);
+#endif
+	return sys_get_be32(ptr);
 }
 
 uint64_t net_buf_simple_pull_le40(struct net_buf_simple *buf)
 {
-	struct uint40 {
-		uint64_t u40: 40;
-	} __packed val;
-	void *ptr;
-
-	ptr = net_buf_simple_pull_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_pull_mem(buf, 5);
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((struct uint40 *)ptr);
-
-	return sys_le40_to_cpu(val.u40);
+#endif
+	return sys_get_le40(ptr);
 }
 
 uint64_t net_buf_simple_pull_be40(struct net_buf_simple *buf)
 {
-	struct uint40 {
-		uint64_t u40: 40;
-	} __packed val;
-	void *ptr;
-
-	ptr = net_buf_simple_pull_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_pull_mem(buf, 5);
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((struct uint40 *)ptr);
-
-	return sys_be40_to_cpu(val.u40);
+#endif
+	return sys_get_be40(ptr);
 }
 
 uint64_t net_buf_simple_pull_le48(struct net_buf_simple *buf)
 {
-	struct uint48 {
-		uint64_t u48:48;
-	} __packed val;
-	void *ptr;
-
-	ptr = net_buf_simple_pull_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_pull_mem(buf, 6);
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((struct uint48 *)ptr);
-
-	return sys_le48_to_cpu(val.u48);
+#endif
+	return sys_get_le48(ptr);
 }
 
 uint64_t net_buf_simple_pull_be48(struct net_buf_simple *buf)
 {
-	struct uint48 {
-		uint64_t u48:48;
-	} __packed val;
-	void *ptr;
-
-	ptr = net_buf_simple_pull_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_pull_mem(buf, 6);
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((struct uint48 *)ptr);
-
-	return sys_be48_to_cpu(val.u48);
+#endif
+	return sys_get_be48(ptr);
 }
 
 uint64_t net_buf_simple_pull_le64(struct net_buf_simple *buf)
 {
-	uint64_t val;
-	void *ptr;
-
-	ptr = net_buf_simple_pull_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_pull_mem(buf, sizeof(uint64_t));
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((uint64_t *)ptr);
-
-	return sys_le64_to_cpu(val);
+#endif
+	return sys_get_le64(ptr);
 }
 
 uint64_t net_buf_simple_pull_be64(struct net_buf_simple *buf)
 {
-	uint64_t val;
-	void *ptr;
-
-	ptr = net_buf_simple_pull_mem(buf, sizeof(val));
-	if (IS_ENABLED(CONFIG_NET_BUF_HARDENING) && ptr == NULL) {
+	uint8_t const *ptr = net_buf_simple_pull_mem(buf, sizeof(uint64_t));
+#if defined(CONFIG_NET_BUF_HARDENING)
+	if (ptr == NULL) {
 		return 0;
 	}
-	val = UNALIGNED_GET((uint64_t *)ptr);
-
-	return sys_be64_to_cpu(val);
+#endif
+	return sys_get_be64(ptr);
 }

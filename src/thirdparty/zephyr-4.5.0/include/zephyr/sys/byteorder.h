@@ -6,28 +6,54 @@
  * Copyright (c) 2015-2016, Intel Corporation.
  *
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Adapted for CANsub library:
+ * - Removed all Zephyr specific includes, replaced with common types and utilities.
+ * - Replaced asserts.
+ * - Adapted the endian checks.
+ * - Adapted the byteswap checks.
  */
 
 #ifndef ZEPHYR_INCLUDE_SYS_BYTEORDER_H_
 #define ZEPHYR_INCLUDE_SYS_BYTEORDER_H_
 
-#include <zephyr/types.h>
+#include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
-#include <zephyr/sys/__assert.h>
-#include <zephyr/sys/util_macro.h>
-#include <zephyr/toolchain.h>
+#include <assert.h>
 
-#if HAS_BUILTIN(__builtin_bswap16)
+#if defined(CONFIG_LITTLE_ENDIAN) && defined(CONFIG_BIG_ENDIAN)
+#error "Cannot have both little and big endian defined"
+#elif !defined(CONFIG_LITTLE_ENDIAN) && !defined(CONFIG_BIG_ENDIAN)
+#error "Must have either little or big endian defined"
+#endif
+
+#if defined(__has_builtin)
+#if __has_builtin(__builtin_bswap16) && __has_builtin(__builtin_bswap32) && __has_builtin(__builtin_bswap64)
+#define CANSUB_HAS_BUILTIN_BSWAP 1
+#endif
+#endif
+
+#if defined(CANSUB_HAS_BUILTIN_BSWAP)
 #define BSWAP_16(x) ((uint16_t) __builtin_bswap16(x))
+#elif defined(_MSC_VER)
+#include <stdlib.h>
+#define BSWAP_16(x) ((uint16_t) _byteswap_ushort(x))
 #else
+/* Shift fallback */
 #define BSWAP_16(x) ((uint16_t) ((((x) >> 8) & 0xff) | (((x) & 0xff) << 8)))
 #endif
 
-#if HAS_BUILTIN(__builtin_bswap32)
+#if defined(CANSUB_HAS_BUILTIN_BSWAP)
 #define BSWAP_24(x) ((uint32_t) __builtin_bswap32(x) >> 8)
 #define BSWAP_32(x) ((uint32_t) __builtin_bswap32(x))
+#elif defined(_MSC_VER)
+#include <stdlib.h>
+#define BSWAP_24(x) ((uint32_t) _byteswap_ulong(x) >> 8)
+#define BSWAP_32(x) ((uint32_t) _byteswap_ulong(x))
 #else
+/* Shift fallback */
 #define BSWAP_24(x) ((uint32_t) ((((x) >> 16) & 0xff) | \
 				   (((x)) & 0xff00) | \
 				   (((x) & 0xff) << 16)))
@@ -38,11 +64,17 @@
 				   (((x) & 0xff) << 24)))
 #endif
 
-#if HAS_BUILTIN(__builtin_bswap64)
+#if defined(CANSUB_HAS_BUILTIN_BSWAP)
 #define BSWAP_40(x) ((uint64_t) __builtin_bswap64(x) >> 24)
 #define BSWAP_48(x) ((uint64_t) __builtin_bswap64(x) >> 16)
 #define BSWAP_64(x) ((uint64_t) __builtin_bswap64(x))
+#elif defined(_MSC_VER)
+#include <stdlib.h>
+#define BSWAP_40(x) ((uint64_t) _byteswap_uint64(x) >> 24)
+#define BSWAP_48(x) ((uint64_t) _byteswap_uint64(x) >> 16)
+#define BSWAP_64(x) ((uint64_t) _byteswap_uint64(x))
 #else
+/* Shift fallback */
 #define BSWAP_40(x) ((uint64_t) ((((x) >> 32) & 0xff) | \
 				   (((x) >> 16) & 0xff00) | \
 				   (((x)) & 0xff0000) | \
@@ -708,9 +740,7 @@ static inline void sys_memcpy_swap(void *dst, const void *src, size_t length)
 	uint8_t *pdst = (uint8_t *)dst;
 	const uint8_t *psrc = (const uint8_t *)src;
 
-	__ASSERT(((psrc < pdst && (psrc + length) <= pdst) ||
-		  (psrc > pdst && (pdst + length) <= psrc)),
-		 "Source and destination buffers must not overlap");
+	assert((psrc < pdst && (psrc + length) <= pdst) || (psrc > pdst && (pdst + length) <= psrc));
 
 	psrc += length - 1;
 
@@ -749,9 +779,9 @@ static inline void sys_mem_swap(void *buf, size_t length)
  */
 static inline void sys_le_to_cpu(void *buf, size_t length)
 {
-	if (IS_ENABLED(CONFIG_BIG_ENDIAN)) {
-		sys_mem_swap(buf, length);
-	}
+#ifdef CONFIG_BIG_ENDIAN
+	sys_mem_swap(buf, length);
+#endif
 }
 
 /**
@@ -762,9 +792,9 @@ static inline void sys_le_to_cpu(void *buf, size_t length)
  */
 static inline void sys_cpu_to_le(void *buf, size_t length)
 {
-	if (IS_ENABLED(CONFIG_BIG_ENDIAN)) {
-		sys_mem_swap(buf, length);
-	}
+#ifdef CONFIG_BIG_ENDIAN
+	sys_mem_swap(buf, length);
+#endif
 }
 
 /**
@@ -775,9 +805,9 @@ static inline void sys_cpu_to_le(void *buf, size_t length)
  */
 static inline void sys_be_to_cpu(void *buf, size_t length)
 {
-	if (IS_ENABLED(CONFIG_LITTLE_ENDIAN)) {
-		sys_mem_swap(buf, length);
-	}
+#ifdef CONFIG_LITTLE_ENDIAN
+	sys_mem_swap(buf, length);
+#endif
 }
 
 /**
@@ -788,9 +818,9 @@ static inline void sys_be_to_cpu(void *buf, size_t length)
  */
 static inline void sys_cpu_to_be(void *buf, size_t length)
 {
-	if (IS_ENABLED(CONFIG_LITTLE_ENDIAN)) {
-		sys_mem_swap(buf, length);
-	}
+#ifdef CONFIG_LITTLE_ENDIAN
+	sys_mem_swap(buf, length);
+#endif
 }
 
 /**
@@ -805,11 +835,11 @@ static inline void sys_cpu_to_be(void *buf, size_t length)
  */
 static inline void sys_put_le(void *dst, const void *src, size_t length)
 {
-	if (IS_ENABLED(CONFIG_LITTLE_ENDIAN)) {
-		(void)memcpy(dst, src, length);
-	} else {
-		sys_memcpy_swap(dst, src, length);
-	}
+#ifdef CONFIG_LITTLE_ENDIAN
+	(void)memcpy(dst, src, length);
+#else
+	sys_memcpy_swap(dst, src, length);
+#endif
 }
 
 /**
@@ -824,11 +854,11 @@ static inline void sys_put_le(void *dst, const void *src, size_t length)
  */
 static inline void sys_put_be(void *dst, const void *src, size_t length)
 {
-	if (IS_ENABLED(CONFIG_LITTLE_ENDIAN)) {
-		sys_memcpy_swap(dst, src, length);
-	} else {
-		(void)memcpy(dst, src, length);
-	}
+#ifdef CONFIG_LITTLE_ENDIAN
+	sys_memcpy_swap(dst, src, length);
+#else
+	(void)memcpy(dst, src, length);
+#endif
 }
 
 /**
@@ -843,11 +873,11 @@ static inline void sys_put_be(void *dst, const void *src, size_t length)
  */
 static inline void sys_get_le(void *dst, const void *src, size_t length)
 {
-	if (IS_ENABLED(CONFIG_LITTLE_ENDIAN)) {
-		(void)memcpy(dst, src, length);
-	} else {
-		sys_memcpy_swap(dst, src, length);
-	}
+#ifdef CONFIG_LITTLE_ENDIAN
+	(void)memcpy(dst, src, length);
+#else
+	sys_memcpy_swap(dst, src, length);
+#endif
 }
 
 /**
@@ -862,11 +892,11 @@ static inline void sys_get_le(void *dst, const void *src, size_t length)
  */
 static inline void sys_get_be(void *dst, const void *src, size_t length)
 {
-	if (IS_ENABLED(CONFIG_LITTLE_ENDIAN)) {
-		sys_memcpy_swap(dst, src, length);
-	} else {
-		(void)memcpy(dst, src, length);
-	}
+#ifdef CONFIG_LITTLE_ENDIAN
+	sys_memcpy_swap(dst, src, length);
+#else
+	(void)memcpy(dst, src, length);
+#endif
 }
 
 #endif /* ZEPHYR_INCLUDE_SYS_BYTEORDER_H_ */
