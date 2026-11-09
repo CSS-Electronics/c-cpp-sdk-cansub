@@ -326,8 +326,10 @@ typedef enum cansub_result_code {
     CANSUB_RESULT_NOT_FOUND = -10,
     /** This library does not support the checked item, e.g. the remote API version. */
     CANSUB_RESULT_NOT_SUPPORTED = -11,
-    /** Internal library error. Fatal for the context, see the result code overview. Corresponds to INT32_MIN. */
-    CANSUB_RESULT_ERROR = -2147483648,
+    /** Internal library error. Fatal for the context, see the result code overview. Corresponds to INT32_MIN. Written
+     * as -2147483647 - 1, as the literal 2147483648 does not fit an int, and negating it as an unsigned long draws
+     * warning C4146 from MSVC. */
+    CANSUB_RESULT_ERROR = (-2147483647 - 1),
 } cansub_result_code;
 
 /**
