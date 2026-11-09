@@ -254,3 +254,54 @@ Contact
 * To report a security vulnerability in Mbed TLS, please email <mbed-tls-security@lists.trustedfirmware.org>. For more information, see [`SECURITY.md`](SECURITY.md).
 * To report a bug or request a feature in Mbed TLS, please [file an issue on GitHub](https://github.com/Mbed-TLS/mbedtls/issues/new/choose).
 * Please see [`SUPPORT.md`](SUPPORT.md) for other channels for discussion and support about Mbed TLS.
+
+CANsub library changes
+----------------------
+
+The following folders have been removed:
+* `.github`
+* `3rdparty`
+* `ChangeLog.d`
+* `configs`
+* `docs`
+* `doxygen`
+* `framework`
+* `programs`
+* `scripts`
+* `tests`
+* `tf-psa-crypto/.github`
+* `tf-psa-crypto/ChangeLog.d`
+* `tf-psa-crypto/configs`
+* `tf-psa-crypto/docs`
+* `tf-psa-crypto/drivers/pqcp`
+* `tf-psa-crypto/framework`
+* `tf-psa-crypto/programs`
+* `tf-psa-crypto/scripts`
+* `tf-psa-crypto/tests`
+
+The following files have been removed:
+* `.gitmodules`
+* `.globalrc`
+* `.mypy.ini`
+* `.pylintrc`
+* `.readthedocs.yaml`
+* `.travis.yml`
+* `.uncrustify.cfg`
+* `ChangeLog`
+* `tf-psa-crypto/.gitmodules`
+* `tf-psa-crypto/.globalrc`
+* `tf-psa-crypto/.mypy.ini`
+* `tf-psa-crypto/.pylintrc`
+* `tf-psa-crypto/.uncrustify.cfg`
+* `tf-psa-crypto/ChangeLog`
+
+The `pqcp` driver only provides ML-DSA, which the CANsub library does not use. `TF_PSA_CRYPTO_PQCP_MLDSA_ENABLED` must
+stay undefined in the TF-PSA-Crypto configuration.
+
+The following files have been changed:
+* `CMakeLists.txt`:
+  * The framework folders are no longer used.
+  * `GEN_FILES` defaults to `OFF`, as the generated files are included.
+  * The test include paths no longer list the removed `pqcp` driver.
+* `tf-psa-crypto/CMakeLists.txt`: The framework folders are no longer used.
+* `tf-psa-crypto/drivers/CMakeLists.txt`: The removed `pqcp` driver is no longer built or used as an include path.

@@ -15,6 +15,9 @@
 #   TF_PSA_CRYPTO_TARGET_PREFIX. The value of this variable is prefixed to the
 #   tfpsacrypto and tfpsacrypto-apidoc targets.
 #
+# Adaptions for CANsub library
+# - The framework folders have been removed
+#
 
 # We specify a minimum requirement of 3.10.2, but for now use 3.5.1 here
 # until our infrastructure catches up.
@@ -62,8 +65,9 @@ if(NOT DEFINED TF_PSA_CRYPTO_AS_SUBPROJECT)
   endif()
 endif()
 
-# Set the project, Mbed TLS and framework root directory.
-set(TF_PSA_CRYPTO_FRAMEWORK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/framework)
+# Disabled for CANsub library
+## Set the project, Mbed TLS and framework root directory.
+#set(TF_PSA_CRYPTO_FRAMEWORK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/framework)
 
 # Put the version numbers into relevant files
 set(version_number_files
@@ -396,9 +400,10 @@ if(CMAKE_BUILD_TYPE STREQUAL "Check" AND TEST_CPP)
     endif()
 endif()
 
-if (NOT EXISTS "${TF_PSA_CRYPTO_FRAMEWORK_DIR}/CMakeLists.txt")
-    message(FATAL_ERROR "${TF_PSA_CRYPTO_FRAMEWORK_DIR}/CMakeLists.txt not found. Run `git submodule update --init` from the source tree to fetch the submodule contents.")
-endif()
+# Disabled for CANsub library
+#if (NOT EXISTS "${TF_PSA_CRYPTO_FRAMEWORK_DIR}/CMakeLists.txt")
+#    message(FATAL_ERROR "${TF_PSA_CRYPTO_FRAMEWORK_DIR}/CMakeLists.txt not found. Run `git submodule update --init` from the source tree to fetch the submodule contents.")
+#endif()
 
 #
 # Directories with internal headers. The headers in that directories are not
@@ -423,7 +428,8 @@ set(TF_PSA_CRYPTO_PRIVATE_INCLUDE_DIRS
 # constructed in `drivers/CMakeLists.txt`. This list may include a generated
 # test driver.
 #
-add_subdirectory(framework)
+# Disabled for CANsub library
+#add_subdirectory(framework)
 add_subdirectory(include)
 add_subdirectory(drivers)   # must precede core
 add_subdirectory(extras)

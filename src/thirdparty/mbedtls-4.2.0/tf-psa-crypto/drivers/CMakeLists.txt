@@ -1,8 +1,13 @@
+# Adaptions for CANsub library
+# - The pqcp driver has been removed
+#
+
 set(drivers
     builtin
     everest
     p256-m
-    pqcp
+    # Disabled for CANsub library
+    #pqcp
 )
 
 # Drivers currently depend on each other through the indirect inclusion of
@@ -13,7 +18,8 @@ set(TF_PSA_CRYPTO_DRIVERS_INCLUDE_DIRS
         ${CMAKE_CURRENT_SOURCE_DIR}/builtin/include
         ${CMAKE_CURRENT_SOURCE_DIR}/everest/include
         ${CMAKE_CURRENT_SOURCE_DIR}/p256-m
-        ${CMAKE_CURRENT_SOURCE_DIR}/pqcp/include
+        # Disabled for CANsub library
+        #${CMAKE_CURRENT_SOURCE_DIR}/pqcp/include
 )
 
 # The core and drivers need to see the driver dispatch functions in
@@ -115,7 +121,8 @@ set(TF_PSA_CRYPTO_DRIVER_TARGETS "${driver_targets}" PARENT_SCOPE)
 add_subdirectory(everest)
 add_subdirectory(p256-m)
 add_subdirectory(builtin)
-add_subdirectory(pqcp)
+# Disabled for CANsub library
+#add_subdirectory(pqcp)
 
 if (GEN_FILES)
     # Make sure psa_crypto_driver_wrappers.h is available before building

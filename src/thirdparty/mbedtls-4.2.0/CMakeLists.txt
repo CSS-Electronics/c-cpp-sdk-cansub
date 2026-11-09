@@ -15,6 +15,11 @@
 #   MBEDTLS_TARGET_PREFIX. The value of this variable is prefixed to the
 #   mbedtls, mbedx509, tfpsacrypto and mbedtls-apidoc targets.
 #
+# Adaptions for CANsub library
+# - The framework folders have been removed
+# - GEN_FILES defaults to OFF, as the generated files are included
+# - The pqcp driver has been removed
+#
 
 # We specify a minimum requirement of 3.10.2, but for now use 3.5.1 here
 # until our infrastructure catches up.
@@ -334,14 +339,15 @@ if(CMAKE_BUILD_TYPE STREQUAL "Check" AND TEST_CPP)
     endif()
 endif()
 
-if (NOT EXISTS "${MBEDTLS_FRAMEWORK_DIR}/CMakeLists.txt")
-    if (EXISTS "${MBEDTLS_DIR}/.git")
-        message(FATAL_ERROR "${MBEDTLS_FRAMEWORK_DIR}/CMakeLists.txt not found (and does appear to be a git checkout). Run `git submodule update --init` from the source tree to fetch the submodule contents.")
-    else ()
-        message(FATAL_ERROR "${MBEDTLS_FRAMEWORK_DIR}/CMakeLists.txt not found (and does not appear to be a git checkout). Please ensure you have downloaded the right archive from the release page on GitHub.")
-    endif()
-endif()
-add_subdirectory(framework)
+# Disabled for CANsub library
+#if (NOT EXISTS "${MBEDTLS_FRAMEWORK_DIR}/CMakeLists.txt")
+#    if (EXISTS "${MBEDTLS_DIR}/.git")
+#        message(FATAL_ERROR "${MBEDTLS_FRAMEWORK_DIR}/CMakeLists.txt not found (and does appear to be a git checkout). Run `git submodule update --init` from the source tree to fetch the submodule contents.")
+#    else ()
+#        message(FATAL_ERROR "${MBEDTLS_FRAMEWORK_DIR}/CMakeLists.txt not found (and does not appear to be a git checkout). Please ensure you have downloaded the right archive from the release page on GitHub.")
+#    endif()
+#endif()
+#add_subdirectory(framework)
 
 add_subdirectory(include)
 
@@ -436,7 +442,8 @@ if(ENABLE_TESTING OR ENABLE_PROGRAMS)
                 tf-psa-crypto/include
                 tf-psa-crypto/drivers/builtin/include
                 tf-psa-crypto/drivers/everest/include
-                tf-psa-crypto/drivers/pqcp/include
+                # Disabled for CANsub library
+                #tf-psa-crypto/drivers/pqcp/include
                 library
                 ${TF_PSA_CRYPTO_PRIVATE_INCLUDE_DIRS}
     )
@@ -474,7 +481,8 @@ if(ENABLE_TESTING OR ENABLE_PROGRAMS)
                 tf-psa-crypto/drivers/builtin/include
                 library
                 tf-psa-crypto/drivers/everest/include
-                tf-psa-crypto/drivers/pqcp/include
+                # Disabled for CANsub library
+                #tf-psa-crypto/drivers/pqcp/include
                 ${TF_PSA_CRYPTO_PRIVATE_INCLUDE_DIRS}
     )
 
